@@ -1,4 +1,4 @@
-// api/telegram.js - versione CommonJS per Vercel
+// api/telegram.js - versione CommonJS per Vercel con lettura body Telegram
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -6,6 +6,21 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TELEGRAM_SEND_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 
+// Legge il body raw della richiesta (necessario su Vercel per i webhook Telegram)
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+    req.on("end", () => {
+      resolve(data);
+    });
+    req.on("error", reject);
+  });
+}
+
+// Genera una risposta elegante tramite OpenAI
 async function generaRispostaElegante(userText) {
   try {
     const prompt = `
@@ -45,11 +60,21 @@ Risposta (solo testo, senza premesse):`;
   }
 }
 
-// handler in stile CommonJS
+// Handler principale per il webhook Telegram
 module.exports = async (req, res) => {
   try {
     if (req.method === "POST") {
-      const update = req.body || {};
+      const rawBody = await readBody(req);
+
+      let update = {};
+      try {
+        update = JSON.parse(rawBody || "{}");
+      } catch (e) {
+        console.error("Errore nel parse del body Telegram:", e, rawBody);
+      }
+
+      console.log("Update Telegram ricevuto:", JSON.stringify(update));
+
       const message = update.message;
       const text = message?.text;
       const chatId = message?.chat?.id;
@@ -70,7 +95,7 @@ module.exports = async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    // GET di test
+    // GET di test da browser
     return res.status(200).send("OK");
   } catch (err) {
     console.error("Errore nel webhook Telegram:", err);
