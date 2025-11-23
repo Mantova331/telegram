@@ -23,7 +23,7 @@ function readBody(req) {
   });
 }
 
-// Risposta semplice: niente OpenAI per ora
+// Risposta semplice: niente OpenAI per ora, giusto per vedere che il bot risponde
 async function generaRisposta(userText) {
   return `Hai scritto: ${userText}`;
 }
