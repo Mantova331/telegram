@@ -1,96 +1,69 @@
-// api/telegram.js - versione semplice con log per il token
+// api/telegram.js - versione semplice, CommonJS per Vercel
 
+// Token del bot Telegram (impostalo nelle Environment Variables di Vercel)
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_SEND_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
-console.log(
-  "TELEGRAM_BOT_TOKEN presente:",
-  !!process.env.TELEGRAM_BOT_TOKEN
-);
-console.log("TELEGRAM_TOKEN usato:", TELEGRAM_TOKEN);
+// URL base per le chiamate a Telegram
+const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
-// Legge il body raw della richiesta (necessario su Vercel per i webhook Telegram)
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    req.on("data", (chunk) => {
-      data += chunk;
-    });
-    req.on("end", () => {
-      resolve(data);
-    });
-    req.on("error", reject);
-  });
-}
-
-// Risposta semplice: niente OpenAI per ora, giusto per vedere che il bot risponde
+// Funzione che genera la risposta (ora solo eco, poi possiamo aggiungere l'AI)
 async function generaRisposta(userText) {
+  // Per iniziare, rispondiamo semplicemente ripetendo il testo
   return `Hai scritto: ${userText}`;
 }
 
-// Handler principale per il webhook Telegram
+// Handler per Vercel (CommonJS)
 module.exports = async (req, res) => {
   try {
+    console.log("Richiesta ricevuta su /api/telegram, method:", req.method);
+
+    // Per sicurezza: se il token non c'è, log e uscita "soft"
+    if (!TELEGRAM_TOKEN) {
+      console.error(
+        "ATTENZIONE: TELEGRAM_BOT_TOKEN non è impostato nelle variabili di ambiente!"
+      );
+      return res.status(200).send("OK");
+    }
+
+    // Solo POST usate da Telegram per il webhook
     if (req.method === "POST") {
-      const rawBody = await readBody(req);
-
-      let update = {};
-      try {
-        update = JSON.parse(rawBody || "{}");
-      } catch (e) {
-        console.error("Errore nel parse del body Telegram:", e, rawBody);
-      }
-
+      const update = req.body;
       console.log("Update Telegram ricevuto:", JSON.stringify(update));
 
       const message = update.message;
-      const text = message?.text;
-      const chatId = message?.chat?.id;
 
-      if (!TELEGRAM_TOKEN) {
-        console.error(
-          "ATTENZIONE: TELEGRAM_TOKEN è undefined. Controlla TELEGRAM_BOT_TOKEN su Vercel."
-        );
+      // Se non c'è un messaggio testuale, non facciamo nulla
+      if (!message || !message.text) {
+        return res.status(200).send("OK");
       }
 
-      if (chatId && text && TELEGRAM_TOKEN) {
-        const reply = await generaRisposta(text);
+      const chatId = message.chat.id;
+      const userText = message.text;
 
-        try {
-          const tgResp = await fetch(TELEGRAM_SEND_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: reply,
-            }),
-          });
+      // Genera il testo di risposta
+      const replyText = await generaRisposta(userText);
 
-          const tgText = await tgResp.text();
-          console.log(
-            "Risposta Telegram sendMessage:",
-            tgResp.status,
-            tgText
-          );
-        } catch (e) {
-          console.error("Errore nella chiamata Telegram sendMessage:", e);
-        }
-      } else {
-        console.log(
-          "Nessun chatId o text o token mancante:",
-          "chatId =",
-          message?.chat?.id,
-          "text =",
-          message?.text,
-          "TELEGRAM_TOKEN presente =",
-          !!TELEGRAM_TOKEN
-        );
-      }
+      // Invia la risposta a Telegram
+      const sendUrl = `${TELEGRAM_API_URL}/sendMessage`;
+
+      console.log("Invio messaggio a Telegram:", {
+        chat_id: chatId,
+        text: replyText,
+      });
+
+      await fetch(sendUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: replyText,
+        }),
+      });
 
       return res.status(200).send("OK");
     }
 
-    // GET di test da browser
+    // Per eventuali GET da browser (test veloce)
     return res.status(200).send("OK");
   } catch (err) {
     console.error("Errore nel webhook Telegram:", err);
